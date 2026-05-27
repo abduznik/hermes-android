@@ -54,8 +54,8 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showAddDialog() {
     showDialog(
       context: context,
-      builder: (_) => _AddDialog(onSave: (label, host, port, sessionToken) {
-        widget.connManager.saveConnection(label, host, port, sessionToken);
+      builder: (_) => _AddDialog(onSave: (label, host, port) {
+        widget.connManager.saveConnection(label, host, port);
         _refresh();
       }),
     );
@@ -123,7 +123,7 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 class _AddDialog extends StatefulWidget {
-  final void Function(String label, String host, int port, String sessionToken) onSave;
+  final void Function(String label, String host, int port) onSave;
   const _AddDialog({required this.onSave});
 
   @override
@@ -134,7 +134,6 @@ class _AddDialogState extends State<_AddDialog> {
   final _label = TextEditingController(text: 'Home');
   final _host = TextEditingController(text: '127.0.0.1');
   final _port = TextEditingController(text: '9119');
-  final _token = TextEditingController(text: '__HERMES_SESSION_TOKEN__');
 
   @override
   Widget build(BuildContext context) {
@@ -160,17 +159,6 @@ class _AddDialogState extends State<_AddDialog> {
             decoration: const InputDecoration(labelText: 'Port'),
             keyboardType: TextInputType.number,
           ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _token,
-            decoration: const InputDecoration(
-              labelText: 'Session Token',
-              helperText: 'Get from browser console: window.__HERMES_SESSION_TOKEN__',
-              hintText: 'session_token_from_dashboard',
-            ),
-            autocorrect: false,
-            maxLength: 256,
-          ),
         ],
       ),
       actions: [
@@ -183,9 +171,8 @@ class _AddDialogState extends State<_AddDialog> {
             final label = _label.text.trim();
             final host = _host.text.trim();
             final port = int.tryParse(_port.text.trim()) ?? 9119;
-            final sessionToken = _token.text.trim();
-            if (label.isNotEmpty && host.isNotEmpty && port > 0 && sessionToken.isNotEmpty) {
-              widget.onSave(label, host, port, sessionToken);
+            if (label.isNotEmpty && host.isNotEmpty && port > 0) {
+              widget.onSave(label, host, port);
               Navigator.pop(context);
             }
           },
@@ -200,7 +187,6 @@ class _AddDialogState extends State<_AddDialog> {
     _label.dispose();
     _host.dispose();
     _port.dispose();
-    _token.dispose();
     super.dispose();
   }
 }

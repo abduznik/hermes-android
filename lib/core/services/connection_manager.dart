@@ -25,13 +25,12 @@ class ConnectionManager {
     }).toList();
   }
 
-  void saveConnection(String label, String host, int port, String sessionToken) {
+  void saveConnection(String label, String host, int port) {
     final conn = SavedConnection(
       id: _uuid.v4(),
       label: label,
       host: host,
       port: port,
-      sessionToken: sessionToken,
     );
     final current = getConnections();
     current.insert(0, conn);
@@ -53,30 +52,72 @@ class ConnectionManager {
 }
 
 /// HTTP client for the Hermes dashboard REST API.
+///
+/// Automatically discovers the ephemeral session token by fetching the
+/// dashboard SPA page (GET /) and extracting the embedded
+/// `window.__HERMES_SESSION_TOKEN__` value.
 class ApiClient {
   final http.Client _http;
+  // Per-connection token cache: baseUrl -> token
+  final Map<String, String> _tokenCache = {};
 
   ApiClient() : _http = http.Client();
 
-  Future<Map<String, dynamic>> _get(String baseUrl, String endpoint, String sessionToken) async {
+  /// Auto-discover the session token by fetching the SPA page.
+  Future<String> _getSessionToken(String baseUrl) async {
+    final cached = _tokenCache[baseUrl];
+    if (cached != null) return cached;
+
+    final url = '$baseUrl/';
+    final res = await _http.get(Uri.parse(url));
+    if (res.statusCode != 200) {
+      throw Exception('HTTP ${res.statusCode} on /: ${res.body}');
+    }
+
+    // Extract window.__HERMES_SESSION_TOKEN__="..." from the <script> tag
+    final body = res.body;
+    final match = RegExp(r'window\.__HERMES_SESSION_TOKEN__="([^"]+)";').firstMatch(body!);
+    if (match == null) {
+      throw Exception('Session token not found in SPA page');
+    }
+
+    final token = match.group(1)!;
+    _tokenCache[baseUrl] = token;
+    return token;
+  }
+
+  Future<Map<String, dynamic>> _get(String baseUrl, String endpoint) async {
+    final token = await _getSessionToken(baseUrl);
     final url = '$baseUrl/api/$endpoint';
     final res = await _http.get(Uri.parse(url), headers: {
-      'X-Hermes-Session-Token': sessionToken,
+      'X-Hermes-Session-Token': token,
     });
     if (res.statusCode < 200 || res.statusCode >= 300) {
+      // If we get a 401, invalidate the cached token and retry once
+      if (res.statusCode == 401) {
+        _tokenCache.remove(baseUrl);
+        final newToken = await _getSessionToken(baseUrl);
+        final retryRes = await _http.get(Uri.parse(url), headers: {
+          'X-Hermes-Session-Token': newToken,
+        });
+        if (retryRes.statusCode < 200 || retryRes.statusCode >= 300) {
+          throw Exception('HTTP ${retryRes.statusCode}: ${retryRes.body}');
+        }
+        return jsonDecode(retryRes.body) as Map<String, dynamic>;
+      }
       throw Exception('HTTP ${res.statusCode}: ${res.body}');
     }
     return jsonDecode(res.body) as Map<String, dynamic>;
   }
 
-  Future<List<Session>> getSessions(String baseUrl, String sessionToken) async {
-    final data = await _get(baseUrl, 'sessions', sessionToken);
+  Future<List<Session>> getSessions(String baseUrl) async {
+    final data = await _get(baseUrl, 'sessions');
     final list = data['sessions'] as List? ?? [];
     return list.map((s) => Session.fromJson(s as Map<String, dynamic>)).toList();
   }
 
-  Future<List<Map<String, dynamic>>> getMessages(String baseUrl, String sessionId, String sessionToken) async {
-    final data = await _get(baseUrl, 'sessions/$sessionId/messages', sessionToken);
+  Future<List<Map<String, dynamic>>> getMessages(String baseUrl, String sessionId) async {
+    final data = await _get(baseUrl, 'sessions/$sessionId/messages');
     final list = data['messages'] as List? ?? [];
     return list.cast<Map<String, dynamic>>();
   }

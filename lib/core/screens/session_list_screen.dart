@@ -37,10 +37,7 @@ class _SessionListScreenState extends State<SessionListScreen> {
     });
 
     try {
-      final sessions = await _client!.getSessions(
-        widget.connection.baseUrl,
-        widget.connection.sessionToken,
-      );
+      final sessions = await _client!.getSessions(widget.connection.baseUrl);
       setState(() {
         _sessions = sessions;
         _loading = false;

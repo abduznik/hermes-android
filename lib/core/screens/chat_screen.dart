@@ -46,7 +46,6 @@ class _ChatScreenState extends State<ChatScreen> {
       final messages = await _client!.getMessages(
         widget.connection.baseUrl,
         widget.session.id,
-        widget.connection.sessionToken,
       );
       setState(() {
         _messages = messages;
