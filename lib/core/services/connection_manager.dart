@@ -25,12 +25,13 @@ class ConnectionManager {
     }).toList();
   }
 
-  void saveConnection(String label, String host, int port) {
+  void saveConnection(String label, String host, int port, String sessionToken) {
     final conn = SavedConnection(
       id: _uuid.v4(),
       label: label,
       host: host,
       port: port,
+      sessionToken: sessionToken,
     );
     final current = getConnections();
     current.insert(0, conn);
@@ -57,29 +58,27 @@ class ApiClient {
 
   ApiClient() : _http = http.Client();
 
-  Future<Map<String, dynamic>> _get(String baseUrl, String endpoint) async {
+  Future<Map<String, dynamic>> _get(String baseUrl, String endpoint, String sessionToken) async {
     final url = '$baseUrl/api/$endpoint';
-    final res = await _http.get(Uri.parse(url));
+    final res = await _http.get(Uri.parse(url), headers: {
+      'X-Hermes-Session-Token': sessionToken,
+    });
     if (res.statusCode < 200 || res.statusCode >= 300) {
       throw Exception('HTTP ${res.statusCode}: ${res.body}');
     }
     return jsonDecode(res.body) as Map<String, dynamic>;
   }
 
-  Future<List<Session>> getSessions(String baseUrl) async {
-    final data = await _get(baseUrl, 'sessions');
+  Future<List<Session>> getSessions(String baseUrl, String sessionToken) async {
+    final data = await _get(baseUrl, 'sessions', sessionToken);
     final list = data['sessions'] as List? ?? [];
     return list.map((s) => Session.fromJson(s as Map<String, dynamic>)).toList();
   }
 
-  Future<List<Map<String, dynamic>>> getMessages(String baseUrl, String sessionId) async {
-    final data = await _get(baseUrl, 'sessions/$sessionId/messages');
+  Future<List<Map<String, dynamic>>> getMessages(String baseUrl, String sessionId, String sessionToken) async {
+    final data = await _get(baseUrl, 'sessions/$sessionId/messages', sessionToken);
     final list = data['messages'] as List? ?? [];
     return list.cast<Map<String, dynamic>>();
-  }
-
-  Future<Map<String, dynamic>> getStatus(String baseUrl) async {
-    return _get(baseUrl, 'status');
   }
 
   void close() => _http.close();

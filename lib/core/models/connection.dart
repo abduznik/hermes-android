@@ -4,12 +4,14 @@ class SavedConnection {
   final String label;
   final String host;
   final int port;
+  final String sessionToken;
 
   SavedConnection({
     required this.id,
     required this.label,
     required this.host,
     required this.port,
+    required this.sessionToken,
   });
 
   String get baseUrl => 'http://$host:$port';
@@ -19,6 +21,7 @@ class SavedConnection {
     'label': label,
     'host': host,
     'port': port,
+    'sessionToken': sessionToken,
   };
 
   factory SavedConnection.fromMap(Map<String, dynamic> map) {
@@ -27,6 +30,7 @@ class SavedConnection {
       label: map['label'] as String,
       host: map['host'] as String,
       port: map['port'] as int,
+      sessionToken: map['sessionToken'] as String ?? '',
     );
   }
 }
