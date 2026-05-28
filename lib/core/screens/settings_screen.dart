@@ -297,6 +297,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         // ---- Section: Theme ----
         _buildSectionHeader('Appearance'),
         _ThemeToggle(),
+        const SizedBox(height: 8),
+        _VerboseToggle(),
         const SizedBox(height: 16),
 
         // ---- Section: Connection ----
@@ -420,7 +422,46 @@ class _AboutCardState extends State<_AboutCard> {
   }
 }
 
-/// Theme toggle with three-way segmented control: System | Dark | Light.
+/// Toggle for verbose mode — shows tool calls, thinking, and message metadata in chat.
+class _VerboseToggle extends StatefulWidget {
+  @override
+  State<_VerboseToggle> createState() => _VerboseToggleState();
+}
+
+class _VerboseToggleState extends State<_VerboseToggle> {
+  bool _verbose = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() => _verbose = prefs.getBool('verbose_mode') ?? false);
+  }
+
+  Future<void> _set(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('verbose_mode', value);
+    setState(() => _verbose = value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: SwitchListTile(
+        title: const Text('Verbose Mode'),
+        subtitle: const Text('Show tool calls, thinking, and message metadata'),
+        secondary: const Icon(Icons.terminal),
+        value: _verbose,
+        onChanged: _set,
+      ),
+    );
+  }
+}
+
 class _ThemeToggle extends StatefulWidget {
   @override
   State<_ThemeToggle> createState() => _ThemeToggleState();

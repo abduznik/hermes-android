@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
 import '../services/connection_manager.dart';
 import '../utils/responsive.dart';
@@ -34,6 +35,9 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _sending = false;
   bool _streaming = false;
 
+  // Verbose mode
+  bool _verboseMode = false;
+
   // Media attachments
   final ImagePicker _picker = ImagePicker();
   List<XFile> _attachments = [];
@@ -47,7 +51,13 @@ class _ChatScreenState extends State<ChatScreen> {
     super.initState();
     _client = ApiClient();
     _fetchMessages();
+    _loadVerboseMode();
     _scrollController.addListener(_onScroll);
+  }
+
+  Future<void> _loadVerboseMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() => _verboseMode = prefs.getBool('verbose_mode') ?? false);
   }
 
   @override
@@ -321,7 +331,12 @@ class _ChatScreenState extends State<ChatScreen> {
         final content = (msg['content'] as String?) ?? '';
         final isUser = role == 'user';
 
-        return _MessageBubble(content: content, isUser: isUser);
+        return _MessageBubble(
+          content: content,
+          isUser: isUser,
+          verbose: _verboseMode,
+          metadata: msg,
+        );
       },
     );
   }
@@ -330,63 +345,138 @@ class _ChatScreenState extends State<ChatScreen> {
 class _MessageBubble extends StatelessWidget {
   final String content;
   final bool isUser;
+  final bool verbose;
+  final Map<String, dynamic> metadata;
 
-  const _MessageBubble({required this.content, required this.isUser});
+  const _MessageBubble({
+    required this.content,
+    required this.isUser,
+    this.verbose = false,
+    this.metadata = const {},
+  });
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    if (isUser) {
-      return Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        alignment: Alignment.centerRight,
-        child: Container(
-          constraints: BoxConstraints(
-            maxWidth: MediaQuery.of(context).size.width - 80,
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            color: const Color(0xFFD4AF37),
-            borderRadius: BorderRadius.circular(18),
-          ),
-          child: MarkdownBody(
-            data: content,
-            styleSheet: MarkdownStyleSheet(
-              p: theme.textTheme.bodyMedium?.copyWith(color: Colors.white),
-              code: TextStyle(
-                backgroundColor: Colors.white.withValues(alpha: 0.15),
-                fontFamily: 'monospace',
-              ),
-            ),
-          ),
-        ),
-      );
+    final isDark = theme.brightness == Brightness.dark;
+
+    // Bubble colors
+    final userBubbleColor = const Color(0xFFD4AF37);
+    final assistantBubbleColor = isDark
+        ? const Color(0xFF2A2A2A)
+        : const Color(0xFFEAEAEA);
+    final assistantTextColor = isDark
+        ? Colors.white
+        : Colors.black87;
+
+    // Collect extra metadata for verbose mode
+    final List<String> metaLines = [];
+    if (verbose) {
+      final role = (metadata['role'] as String?) ?? 'unknown';
+      metaLines.add('role: $role');
+      // Show any extra fields that aren't role/content
+      for (final entry in metadata.entries) {
+        if (entry.key == 'role' || entry.key == 'content') continue;
+        final value = entry.value?.toString() ?? 'null';
+        if (value.length > 80) {
+          metaLines.add('${entry.key}: ${value.substring(0, 80)}…');
+        } else {
+          metaLines.add('${entry.key}: $value');
+        }
+      }
     }
 
-    // Assistant message
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: MarkdownBody(
-        data: content,
-        styleSheet: MarkdownStyleSheet(
-          p: theme.textTheme.bodyMedium,
-          h1: theme.textTheme.headlineSmall,
-          h2: theme.textTheme.titleLarge,
-          h3: theme.textTheme.titleMedium,
-          code: TextStyle(
-            backgroundColor: Colors.white.withValues(alpha: 0.1),
-            fontFamily: 'monospace',
-            fontSize: 13,
-          ),
-          blockquote: TextStyle(color: Colors.grey, fontStyle: FontStyle.italic),
-          blockquoteDecoration: BoxDecoration(
-            border: Border(left: BorderSide(color: theme.colorScheme.primary, width: 3)),
-          ),
-          a: TextStyle(color: theme.colorScheme.primary),
-          em: theme.textTheme.bodyMedium?.copyWith(fontStyle: FontStyle.italic),
-          strong: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
-        ),
+    final bubble = Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      constraints: BoxConstraints(
+        maxWidth: MediaQuery.of(context).size.width - 80,
       ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: isUser ? userBubbleColor : assistantBubbleColor,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Verbose metadata header
+          if (metaLines.isNotEmpty) ...[
+            Container(
+              margin: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: (isUser ? Colors.white : Colors.black).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: metaLines.map((line) => Text(
+                  line,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontFamily: 'monospace',
+                    color: isUser
+                        ? Colors.white.withValues(alpha: 0.8)
+                        : (isDark ? Colors.grey[400] : Colors.grey[600]),
+                  ),
+                )).toList(),
+              ),
+            ),
+          ],
+          // Message content
+          MarkdownBody(
+            data: content,
+            styleSheet: MarkdownStyleSheet(
+              p: (isUser
+                  ? theme.textTheme.bodyMedium?.copyWith(color: Colors.white)
+                  : theme.textTheme.bodyMedium?.copyWith(color: assistantTextColor)),
+              code: TextStyle(
+                backgroundColor: (isUser ? Colors.white : Colors.black).withValues(alpha: 0.12),
+                fontFamily: 'monospace',
+                color: isUser ? Colors.white : null,
+              ),
+              a: TextStyle(color: isUser ? Colors.white70 : theme.colorScheme.primary),
+              h1: isUser
+                  ? theme.textTheme.headlineSmall?.copyWith(color: Colors.white)
+                  : theme.textTheme.headlineSmall,
+              h2: isUser
+                  ? theme.textTheme.titleLarge?.copyWith(color: Colors.white)
+                  : theme.textTheme.titleLarge,
+              h3: isUser
+                  ? theme.textTheme.titleMedium?.copyWith(color: Colors.white)
+                  : theme.textTheme.titleMedium,
+              blockquote: TextStyle(
+                color: isUser ? Colors.white60 : Colors.grey,
+                fontStyle: FontStyle.italic,
+              ),
+              blockquoteDecoration: BoxDecoration(
+                border: Border(
+                  left: BorderSide(
+                    color: isUser ? Colors.white38 : theme.colorScheme.primary,
+                    width: 3,
+                  ),
+                ),
+              ),
+              em: isUser
+                  ? theme.textTheme.bodyMedium?.copyWith(
+                      fontStyle: FontStyle.italic, color: Colors.white)
+                  : theme.textTheme.bodyMedium?.copyWith(fontStyle: FontStyle.italic),
+              strong: isUser
+                  ? theme.textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.bold, color: Colors.white)
+                  : theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    return Row(
+      mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [bubble],
     );
   }
 }
