@@ -103,10 +103,14 @@ class _MemoryScreenState extends State<MemoryScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Memory'),
-        subtitle: _source != null
-            ? Text('Source: $_source', style: const TextStyle(fontSize: 11))
-            : null,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Memory'),
+            if (_source != null)
+              Text('Source: $_source', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+          ],
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
