@@ -81,15 +81,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
     for (final p in providers) {
       if (p is! Map<String, dynamic>) continue;
       final pMap = p;
-      final providerId = pMap['id'] as String? ?? '';
-      final models = (pMap['models'] as List<dynamic>?)
-              ?.map((m) => m as Map<String, dynamic>)
-              .toList() ??
-          [];
-      if (providerId.isNotEmpty && models.isNotEmpty) {
-        _providers.add(providerId);
-        _providerModels[providerId] = models;
-      }
+      // Provider key is 'slug', not 'id'
+      final providerId = (pMap['slug'] as String?) ?? (pMap['id'] as String?) ?? '';
+      final rawModels = pMap['models'] as List<dynamic>? ?? [];
+      if (providerId.isEmpty || rawModels.isEmpty) continue;
+
+      _providers.add(providerId);
+      // Models are strings (model IDs), not dicts
+      // Convert to list of {'id': modelId, 'name': modelId} maps for dropdown
+      _providerModels[providerId] = rawModels
+          .map((m) {
+            if (m is String) {
+              return {'id': m, 'name': m};
+            } else if (m is Map<String, dynamic>) {
+              return m;
+            }
+            return <String, dynamic>{};
+          })
+          .where((m) => m['id'] != null && (m['id'] as String).isNotEmpty)
+          .toList();
     }
 
     // Set initial selections from current model

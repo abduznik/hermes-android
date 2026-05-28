@@ -40,16 +40,22 @@ class _CronScreenState extends State<CronScreen> {
     });
 
     try {
-      final data = await _client.apiGetList(
-        widget.connection.baseUrl, 'cron/jobs',
-      );
+      List<dynamic> data;
+      try {
+        data = await _client.apiGetList(
+          widget.connection.baseUrl, 'cron/jobs',
+        );
+      } catch (_) {
+        // Fallback: maybe it returns {jobs: [...]} format
+        final map = await _client.apiGet(
+          widget.connection.baseUrl, 'cron/jobs',
+        );
+        data = map['jobs'] as List<dynamic>? ?? [];
+      }
 
-      // Safe cast — skip non-map entries
       final items = <Map<String, dynamic>>[];
       for (final item in data) {
-        if (item is Map<String, dynamic>) {
-          items.add(item);
-        }
+        if (item is Map<String, dynamic>) items.add(item);
       }
 
       setState(() {
