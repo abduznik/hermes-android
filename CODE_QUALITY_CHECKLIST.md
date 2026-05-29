@@ -22,6 +22,6 @@ This checklist must be passed before every release.
 ## Release
 - [ ] Version bumped in pubspec.yaml
 - [ ] CHANGELOG.md updated
-- [ ] CI/CD builds clean APK
+- [ ] CI/DC builds clean APK
 
 This checklist will be maintained at the root of this repository and referenced before every release PR.
