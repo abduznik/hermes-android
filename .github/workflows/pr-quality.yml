@@ -1,0 +1,108 @@
+name: PR Quality Checks
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+  checks: write
+
+jobs:
+  quality:
+    name: Analyze & Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.0'
+          channel: 'stable'
+
+      - name: Cache Flutter dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: flutter-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
+          restore-keys: flutter-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: flutter pub get
+        id: pub_get
+
+      # ── Step 1: Static analysis ──────────────────────────
+      - name: Static analysis
+        id: analyze
+        continue-on-error: true
+        run: |
+          flutter analyze --fatal-infos 2>&1 | tee analyze_output.txt
+          exit ${PIPESTATUS[0]}
+
+      # ── Step 2: Run tests ────────────────────────────────
+      - name: Run tests
+        id: test
+        continue-on-error: true
+        run: |
+          flutter test --reporter=expanded 2>&1 | tee test_output.txt
+          exit ${PIPESTATUS[0]}
+
+      # ── Step 3: Summary & failure report ─────────────────
+      - name: Failure summary
+        if: steps.analyze.outcome != 'success' || steps.test.outcome != 'success'
+        run: |
+          echo "## Quality checks failed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ steps.analyze.outcome }}" != "success" ]; then
+            echo "### Static analysis failed" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            cat analyze_output.txt >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### Static analysis passed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ steps.test.outcome }}" != "success" ]; then
+            echo "### Tests failed" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            cat test_output.txt >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### All tests passed" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      # ── Step 4: Pass/fail enforcement ────────────────────
+      - name: Enforce checks
+        if: steps.analyze.outcome != 'success' || steps.test.outcome != 'success'
+        run: |
+          echo "──────────────────────────────────────────────"
+          echo "Quality gate blocked - see summary above."
+          echo ""
+          if [ "${{ steps.analyze.outcome }}" != "success" ]; then
+            echo "   FAILED: flutter analyze"
+          else
+            echo "   PASSED:  flutter analyze"
+          fi
+          if [ "${{ steps.test.outcome }}" != "success" ]; then
+            echo "   FAILED: flutter test"
+          else
+            echo "   PASSED:  flutter test"
+          fi
+          echo "──────────────────────────────────────────────"
+          exit 1
+
+      - name: All checks passed
+        if: steps.analyze.outcome == 'success' && steps.test.outcome == 'success'
+        run: |
+          echo "## All quality checks passed" >> $GITHUB_STEP_SUMMARY
+          echo "- Static analysis: clean" >> $GITHUB_STEP_SUMMARY
+          echo "- All tests: passing" >> $GITHUB_STEP_SUMMARY
